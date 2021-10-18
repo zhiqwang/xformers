@@ -11,14 +11,9 @@ from typing import Any, Dict, Union
 from xformers.utils import import_all_modules
 
 from .activations import Activation, build_activation  # noqa
-from .attention import Attention, build_attention  # noqa
-from .multi_head_dispatch import MultiHeadDispatch, MultiHeadDispatchConfig  # noqa
-from .residual import LayerNormStyle, PostNorm, PreNorm, Residual  # noqa
-
-__all__ = ["MultiHeadDispatch", "Activation"]
-
-# automatically import any Python files in the directory
-import_all_modules(str(Path(__file__).parent), "xformers.components")
+from .attention import Attention, build_attention
+from .multi_head_dispatch import MultiHeadDispatch, MultiHeadDispatchConfig
+from .residual import LayerNormStyle, PostNorm, PreNorm, Residual
 
 
 def build_multi_head_attention(
@@ -49,3 +44,17 @@ def build_multi_head_attention(
         multi_head_config = MultiHeadDispatchConfig(**multi_head_config)
 
     return MultiHeadDispatch.from_config(multi_head_config)
+
+
+__all__ = [
+    "MultiHeadDispatch",
+    "Activation",
+    "LayerNormStyle",
+    "PostNorm",
+    "PreNorm",
+    "Residual",
+]
+
+
+# automatically import any Python files in the directory
+import_all_modules(str(Path(__file__).parent), "xformers.components")

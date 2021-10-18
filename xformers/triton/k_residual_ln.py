@@ -14,17 +14,19 @@ import triton
 import triton.language as tl
 from torch.cuda.amp import custom_bwd, custom_fwd
 
-_triton_layernorm_fp16_enabled = False  # NOTE: PyTorch keeps layernorm as fp32
+_triton_residual_layernorm_fp16_enabled = False  # NOTE: PyTorch keeps layernorm as fp32
 _triton_registered_warnings = False
 
 
 # fmt: off
 @triton.jit
-def layer_norm_fw(X, Y, W, B, M, V, stride, N, eps, **META):
+def res_layer_norm_fw(X, X_RES, Y, W, B, M, V, stride, N, eps, **META):
     # fmt: on
     """
-    Fused layernorm kernel over a 2D tensor.
-    The layer norm is applied over the last dimension.
+    Fused residual layernorm kernel over a 2D tensor.
+    Two operations are fused here:
+    - The layer norm is applied over the last dimension.
+    - A Pre or Post residual path is used
 
     Compute
         y = (x - E(x))/(sqrt(var(x) + epsilon)) * gamma + beta
@@ -59,6 +61,11 @@ def layer_norm_fw(X, Y, W, B, M, V, stride, N, eps, **META):
     b = tl.where(cols < N, b, zero)
     y = x_zm * x_inv_sigma * w + b
 
+    x_res_ptrs = X_RES + row * stride + cols
+    x_res = tl.load(x_res_ptrs, mask=cols < N, other=0.0).to(tl.float32)
+    x_res = tl.where(cols < N, x_res, 0.)  # Triton bug workarounds
+    y += x_res
+
     # write back to Y.
     y_ptrs = Y + row * stride + cols
     tl.store(y_ptrs, y, mask=cols < N)
@@ -67,7 +74,7 @@ def layer_norm_fw(X, Y, W, B, M, V, stride, N, eps, **META):
 # Backward pass (DX + partial DW + partial DB)
 # fmt: off
 @triton.jit
-def _layer_norm_bwd_dx_fused(
+def res_layer_norm_bwd_dx_fused(
         DX, DY, DW, DB,
         X, W, M, V,
         Lock, stride, N,
@@ -149,7 +156,7 @@ def _layer_norm_bwd_dx_fused(
 # Backward pass (total DW + total DB)
 # fmt: off
 @triton.jit
-def _layer_norm_bwd_dwdb(DW, DB, FINAL_DW, FINAL_DB, M, N, **meta):
+def res_layer_norm_bwd_dwdb(DW, DB, FINAL_DW, FINAL_DB, M, N, **meta):
     # fmt: on
     pid = tl.program_id(0)
     BLOCK_SIZE_M = meta["BLOCK_SIZE_M"]
@@ -173,17 +180,18 @@ def _layer_norm_bwd_dwdb(DW, DB, FINAL_DW, FINAL_DB, M, N, **meta):
     tl.store(FINAL_DB + cols, sum_db, mask=cols < N)
 
 
-class _LayerNorm(torch.autograd.Function):
+class _ResidualLayerNorm(torch.autograd.Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float16 if _triton_layernorm_fp16_enabled else None)
-    def forward(ctx, x, weight, bias, eps):
+    @custom_fwd(cast_inputs=torch.float16 if _triton_residual_layernorm_fp16_enabled else None)
+    def forward(ctx, x, x_res, weight, bias, eps):
 
         # allocate output
         y = torch.empty_like(x)
 
         # reshape input data into 2D tensor
-        x_arg = x.reshape(-1, x.shape[-1])
-        M, N = x_arg.shape
+        x_ = x.reshape(-1, x.shape[-1])
+        x_res_ = x_res.reshape(-1, x.shape[-1])
+        M, N = x_.shape
 
         # allocate mean and std, they'll be used in the backward pass
         mean = torch.empty((M,), dtype=torch.float32, device="cuda")
@@ -195,7 +203,7 @@ class _LayerNorm(torch.autograd.Function):
         if N > BLOCK_SIZE_N:
             raise RuntimeError("This layer norm doesn't support feature dim >= 64KB.")
 
-        if not x_arg.is_contiguous() or not y.is_contiguous():
+        if not x_.is_contiguous() or not y.is_contiguous():
             global _triton_registered_warnings
             if not _triton_registered_warnings:
                 logging.warning("Non-contiguous input tensor found. Making it contiguous,"
@@ -203,7 +211,8 @@ class _LayerNorm(torch.autograd.Function):
 
                 _triton_registered_warnings = True
 
-            x_arg = x_arg.contiguous()
+            x_ = x_.contiguous()
+            x_res_ = x_res_.contiguous()
             y = y.contiguous()
 
         # heuristics for number of warps.
@@ -211,9 +220,9 @@ class _LayerNorm(torch.autograd.Function):
 
         # enqueue kernel
         # fmt: off
-        layer_norm_fw[(M,)](
-            x_arg, y, weight, bias, mean, rstd,
-            x_arg.stride(0),
+        res_layer_norm_fw[(M,)](
+            x_, x_res_, y, weight, bias, mean, rstd,
+            x_.stride(0),
             N,
             eps,
             num_warps=num_warps,
@@ -268,7 +277,7 @@ class _LayerNorm(torch.autograd.Function):
         # also compute partial sums for DW and DB
 
         # fmt: off
-        _layer_norm_bwd_dx_fused[(M,)](
+        res_layer_norm_bwd_dx_fused[(M,)](
             dx, dy, _dw, _db,
             x_arg, weight, mean, var,
             locks,
@@ -285,7 +294,7 @@ class _LayerNorm(torch.autograd.Function):
 
         # accumulate partial sums in separate kernel
         # fmt: off
-        _layer_norm_bwd_dwdb[grid](
+        res_layer_norm_bwd_dwdb[grid](
             _dw, _db, dw, db,
             GROUP_SIZE_M,
             N,

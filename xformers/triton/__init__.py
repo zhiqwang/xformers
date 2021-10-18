@@ -11,6 +11,7 @@ if _triton_available:
     try:
         from .fused_linear_layer import FusedLinear  # noqa
         from .layer_norm import FusedLayerNorm, layer_norm  # noqa
+        from .residual_layer_norm import ResidualLayerNorm  # noqa
         from .softmax import log_softmax, softmax  # noqa
 
         __all__ = [
@@ -18,6 +19,7 @@ if _triton_available:
             "log_softmax",
             "FusedLinear",
             "FusedLayerNorm",
+            "ResidualLayerNorm",
             "layer_norm",
         ]
     except ImportError as e:

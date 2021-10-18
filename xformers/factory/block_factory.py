@@ -11,13 +11,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from xformers.components import (
-    LayerNormStyle,
-    PostNorm,
-    PreNorm,
-    Residual,
-    build_multi_head_attention,
-)
+from xformers.components import build_multi_head_attention
 from xformers.components.feedforward import (
     FEEDFORWARD_REGISTRY,
     FeedforwardConfig,
@@ -28,6 +22,7 @@ from xformers.components.positional_embedding import (
     PositionEmbeddingConfig,
     build_positional_embedding,
 )
+from xformers.components.residual import LayerNormStyle, PostNorm, PreNorm, Residual
 from xformers.utils import generate_matching_config
 
 

@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 
 # NOTE: The Triton layernorm can be activated/deactivated from here
-_is_triton_available = False
+_is_triton_available = True
 
 if _is_triton_available:
     try:
@@ -68,7 +68,6 @@ class PreNorm(nn.Module):
             self.norm: Union[nn.LayerNorm, FusedLayerNorm] = FusedLayerNorm(d_model)
         else:
             self.norm = nn.LayerNorm(d_model)
-
         self.sublayer = sublayer
 
     def forward(self, inputs: Union[torch.Tensor, List[torch.Tensor]], *args, **kwargs):
