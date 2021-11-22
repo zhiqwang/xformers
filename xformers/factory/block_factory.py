@@ -38,7 +38,7 @@ class LayerPositionBitmask(int, Enum):
 
 
 class LayerPosition:
-    """ Bitmask to mark this layer as first, last, nothing or both"""
+    """Bitmask to mark this layer as first, last, nothing or both"""
 
     def __init__(self):
         self.bitmask = LayerPositionBitmask.Default
@@ -189,7 +189,7 @@ class xFormerDecoderConfig(xFormerBlockConfig):
 
 
 class xFormerEncoderBlock(torch.nn.Module):
-    r""" A vanilla Transformer Encoder block """
+    r"""A vanilla Transformer Encoder block"""
 
     def __init__(self, config: xFormerEncoderConfig, **kwargs):
         super().__init__()
