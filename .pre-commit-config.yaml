@@ -5,7 +5,7 @@ default_language_version:
 
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.4.0
+    rev: v4.0.1
     hooks:
     -   id: trailing-whitespace
     -   id: check-ast
@@ -16,14 +16,14 @@ repos:
         args: ['--maxkb=500']
     -   id: end-of-file-fixer
 
--   repo: https://github.com/ambv/black
-    rev: 20.8b1
+-   repo: https://github.com/psf/black
+    rev: 21.11b1
     hooks:
     - id: black
       language_version: python3.8
 
--   repo: https://gitlab.com/pycqa/flake8
-    rev: 3.8.4
+-   repo: https://github.com/PyCQA/flake8
+    rev: 4.0.1
     hooks:
     -   id: flake8
 
@@ -33,7 +33,7 @@ repos:
     -   id: seed-isort-config
 
 -   repo: https://github.com/pycqa/isort
-    rev: 5.7.0
+    rev: 5.10.1
     hooks:
     -   id: isort
         exclude: README.md
@@ -41,6 +41,6 @@ repos:
         args: ["--profile", "black"]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v0.812'
+    rev: 'v0.910-1'
     hooks:
     -   id: mypy
